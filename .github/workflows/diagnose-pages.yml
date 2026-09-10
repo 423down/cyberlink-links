@@ -1,0 +1,54 @@
+name: 诊断 Pages 状态
+
+on:
+  push:
+    paths:
+      - '.github/workflows/diagnose-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 查询 Pages 状态
+        run: |
+          echo "=== 查询当前 Pages 配置 ==="
+          HTTP_CODE=$(curl -s -o /tmp/pages_get.json -w "%{http_code}" -L \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/pages)
+          echo "GET /pages HTTP: $HTTP_CODE"
+          cat /tmp/pages_get.json
+          echo ""
+          echo ""
+
+          echo "=== 尝试开启 Pages (POST) ==="
+          HTTP_CODE2=$(curl -s -o /tmp/pages_post.json -w "%{http_code}" -L -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/pages \
+            -d '{"source":{"branch":"main","path":"/"}}')
+          echo "POST /pages HTTP: $HTTP_CODE2"
+          cat /tmp/pages_post.json
+          echo ""
+          echo ""
+
+          echo "=== 再次查询 Pages 配置 ==="
+          HTTP_CODE3=$(curl -s -o /tmp/pages_get2.json -w "%{http_code}" -L \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/pages)
+          echo "GET /pages HTTP: $HTTP_CODE3"
+          cat /tmp/pages_get2.json
+          echo ""
+
+          echo "=== GITHUB_TOKEN 权限 ==="
+          echo "$GITHUB_TOKEN" | curl -s -L \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }} | python3 -c "import sys,json; d=json.load(sys.stdin); print('permissions:', d.get('permissions', 'N/A'))" 2>/dev/null || echo "无法解析权限"
