@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CyberLink 离线包直链获取器</title>
+<title>CyberLink Offline Installer Link Fetcher</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -139,38 +139,38 @@
 </head>
 <body>
 <div class="container">
-  <h1>CyberLink 离线包直链获取器</h1>
-  <p class="subtitle">PowerDirector / PhotoDirector 最新离线安装包下载地址</p>
+  <h1>CyberLink Offline Installer Link Fetcher</h1>
+  <p class="subtitle">PowerDirector / PhotoDirector Latest Offline Installer Download Links</p>
 
   <div class="cards">
     <div class="card" id="card-pd">
       <div class="card-header">
         <span class="card-title">PowerDirector</span>
-        <span class="badge" id="badge-pd">自动更新</span>
+        <span class="badge" id="badge-pd">Auto-Update</span>
       </div>
       <div class="field">
-        <div class="field-label">离线包下载地址</div>
+        <div class="field-label">Offline Installer URL</div>
         <div class="field-value">
           <a href="#" target="_blank" id="link-pd">-</a>
-          <button class="copy-btn" onclick="copyText('link-pd', this)">复制</button>
+          <button class="copy-btn" onclick="copyText('link-pd', this)">Copy</button>
         </div>
       </div>
       <div class="field">
         <div class="field-label">MD5</div>
         <div class="field-value">
           <span id="md5-pd">-</span>
-          <button class="copy-btn" onclick="copyText('md5-pd', this)">复制</button>
+          <button class="copy-btn" onclick="copyText('md5-pd', this)">Copy</button>
         </div>
       </div>
       <div class="field">
-        <div class="field-label">令牌</div>
+        <div class="field-label">Token</div>
         <div class="field-value">
           <span id="token-pd">-</span>
-          <button class="copy-btn" onclick="copyText('token-pd', this)">复制</button>
+          <button class="copy-btn" onclick="copyText('token-pd', this)">Copy</button>
         </div>
       </div>
       <div class="field">
-        <div class="field-label">大小 / 版本 / 构建时间</div>
+        <div class="field-label">Size / Version / Build Date</div>
         <div class="field-value">
           <span id="meta-pd">-</span>
         </div>
@@ -180,31 +180,31 @@
     <div class="card" id="card-phd">
       <div class="card-header">
         <span class="card-title">PhotoDirector</span>
-        <span class="badge" id="badge-phd">自动更新</span>
+        <span class="badge" id="badge-phd">Auto-Update</span>
       </div>
       <div class="field">
-        <div class="field-label">离线包下载地址</div>
+        <div class="field-label">Offline Installer URL</div>
         <div class="field-value">
           <a href="#" target="_blank" id="link-phd">-</a>
-          <button class="copy-btn" onclick="copyText('link-phd', this)">复制</button>
+          <button class="copy-btn" onclick="copyText('link-phd', this)">Copy</button>
         </div>
       </div>
       <div class="field">
         <div class="field-label">MD5</div>
         <div class="field-value">
           <span id="md5-phd">-</span>
-          <button class="copy-btn" onclick="copyText('md5-phd', this)">复制</button>
+          <button class="copy-btn" onclick="copyText('md5-phd', this)">Copy</button>
         </div>
       </div>
       <div class="field">
-        <div class="field-label">令牌</div>
+        <div class="field-label">Token</div>
         <div class="field-value">
           <span id="token-phd">-</span>
-          <button class="copy-btn" onclick="copyText('token-phd', this)">复制</button>
+          <button class="copy-btn" onclick="copyText('token-phd', this)">Copy</button>
         </div>
       </div>
       <div class="field">
-        <div class="field-label">大小 / 版本 / 构建时间</div>
+        <div class="field-label">Size / Version / Build Date</div>
         <div class="field-value">
           <span id="meta-phd">-</span>
         </div>
@@ -217,7 +217,7 @@
   </p>
 </div>
 
-<div class="toast" id="toast">已复制到剪贴板</div>
+<div class="toast" id="toast">Copied to clipboard</div>
 
 <script>
 var EMBEDDED_DATA = {
@@ -249,11 +249,11 @@ var EMBEDDED_DATA = {
 function copyText(id, btn) {
   var el = document.getElementById(id);
   var text = el.tagName === 'A' ? el.href : el.textContent;
-  if (!text || text === '-' || text === '加载中...') return;
+  if (!text || text === '-' || text === 'Loading...') return;
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(function() {
       if (btn) { btn.classList.add('copied'); setTimeout(function(){ btn.classList.remove('copied'); }, 1500); }
-      showToast('已复制到剪贴板');
+      showToast('Copied to clipboard');
     }).catch(function() { fallbackCopy(text, btn); });
   } else {
     fallbackCopy(text, btn);
@@ -268,7 +268,7 @@ function fallbackCopy(text, btn) {
   try { document.execCommand('copy'); } catch(e) {}
   document.body.removeChild(ta);
   if (btn) { btn.classList.add('copied'); setTimeout(function(){ btn.classList.remove('copied'); }, 1500); }
-  showToast('已复制到剪贴板');
+  showToast('Copied to clipboard');
 }
 
 function showToast(msg) {
@@ -311,7 +311,7 @@ function updateCard(key, data) {
   document.getElementById('md5-' + key).textContent = md5;
   document.getElementById('token-' + key).textContent = token;
   document.getElementById('meta-' + key).textContent = size + ' / ' + version + ' / ' + buildDate;
-  document.getElementById('badge-' + key).textContent = '自动更新';
+  document.getElementById('badge-' + key).textContent = 'Auto-Update';
   document.getElementById('badge-' + key).className = 'badge';
 }
 
@@ -325,7 +325,7 @@ function renderData(data) {
   }
   var updated = data.updated_at ? formatDate(data.updated_at) : '?';
   document.getElementById('footer').innerHTML =
-    '数据更新于 ' + updated + ' | 点击链接直接下载 | 令牌失效请联系更新<br>' +
+    'Data updated: ' + updated + ' | Click link to download | Contact for update if token expires<br>' +
     '<a href="https://www.423down.com" target="_blank">423down.com</a>';
 }
 
@@ -344,10 +344,10 @@ function fetchLatest() {
         }
       })
       .catch(function(e) {
-        console.log('使用嵌入数据:', e.message);
+        console.log('Using embedded data (fetch failed):', e.message);
       });
   } catch(e) {
-    console.log('fetch 异常:', e.message);
+    console.log('Fetch error:', e.message);
   }
 }
 
