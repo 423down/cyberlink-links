@@ -4,7 +4,7 @@
 CyberLink 版本号自动抓取脚本（CI 环境用）
 
 功能：
-1. 调用 CyberLink API 获取最新离线包链接
+1. 调用 CyberLink API 获取最新离线包链接和MD5
 2. 下载安装包，从 7z 提取主程序，读取 PE 版本资源获取真实版本号
 3. 更新 data.json
 4. 输出结果供 CI 提交
@@ -59,7 +59,6 @@ DATA_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data.json'
 
 def get_seven_zip():
     """检测或安装 7z 工具"""
-    # 检测已有
     for cmd in ['7z', '7za', '7zz', '/usr/bin/7z', '/usr/local/bin/7z']:
         try:
             r = subprocess.run([cmd, '--help'], capture_output=True, timeout=5)
@@ -67,8 +66,6 @@ def get_seven_zip():
                 return cmd
         except:
             pass
-
-    # 尝试安装（Ubuntu/Debian）
     print("[*] 未找到 7z，尝试安装...")
     try:
         subprocess.run(['apt-get', 'update', '-qq'], capture_output=True, timeout=60)
@@ -76,8 +73,6 @@ def get_seven_zip():
         return '7z'
     except Exception as e:
         print(f"[!] apt 安装失败: {e}")
-
-    # 下载静态版 7zzs
     try:
         print("[*] 下载 7-Zip 静态版...")
         url = 'https://www.7-zip.org/a/7z2301-linux-x64.tar.xz'
@@ -87,7 +82,6 @@ def get_seven_zip():
         subprocess.run(['tar', 'xf', tar_path, '-C', tmp], capture_output=True, timeout=30)
         seven_zzs = os.path.join(tmp, '7zzs')
         os.chmod(seven_zzs, 0o755)
-        # 复制到 /usr/local/bin
         shutil.copy2(seven_zzs, '/usr/local/bin/7zzs')
         return '/usr/local/bin/7zzs'
     except Exception as e:
@@ -126,26 +120,30 @@ def get_downloader_token(product_key):
         print(f"  [!] 获取下载器令牌失败: {e}", file=sys.stderr)
     return None, None
 
-def fetch_offline_links(product_key, rounds=10):
+def fetch_offline_links(product_key, rounds=15):
     cfg = PRODUCTS[product_key]
     candidates = {}
-
     for i in range(rounds):
         try:
             url = f"{API_URL}?{cfg['api_params']}"
             data, _ = http_get(url, timeout=20)
             text = data.decode('utf-8', errors='replace')
-            m = re.search(r'(https?://build\.cyberlink\.com/Retail/[^"\s<>]+)', text)
-            if m:
-                link = m.group(1)
+            try:
+                resp = json.loads(text)
+                link = resp.get('link', '')
+                api_md5 = resp.get('md5', '')
+            except:
+                m = re.search(r'(https?://build\.cyberlink\.com/Retail/[^"\s<>]+)', text)
+                link = m.group(1) if m else ''
+                api_md5 = ''
+            if link:
                 tm = re.search(r'/Retail/[^/]+/([A-Z0-9]+)/', link)
                 token = tm.group(1) if tm else 'unknown'
                 if token not in candidates:
-                    candidates[token] = link
-                    print(f"  [{i+1}/{rounds}] 新候选: {token}")
+                    candidates[token] = {'link': link, 'md5': api_md5}
+                    print(f"  [{i+1}/{rounds}] 新候选: {token} (md5={api_md5[:16]}...)")
         except Exception as e:
             print(f"  [{i+1}/{rounds}] 错误: {e}", file=sys.stderr)
-
     return candidates
 
 
@@ -219,14 +217,11 @@ def extract_version(download_url, main_exe, seven_zip, work_dir):
     """从安装包提取主程序，读取版本号"""
     try:
         print("  [1/4] 解析 PE 结构...")
-        # 下载 PE 头
         req = urllib.request.Request(download_url, headers={**HEADERS, 'Range': 'bytes=0-0x2000'})
         with urllib.request.urlopen(req, timeout=30) as resp:
             pe_head = resp.read()
         overlay_start = find_overlay_start(pe_head)
         print(f"        Overlay: 0x{overlay_start:X}")
-
-        # 下载 overlay 头找 7z
         req2 = urllib.request.Request(download_url, headers={**HEADERS, 'Range': f'bytes={overlay_start}-{overlay_start+0x5000}'})
         with urllib.request.urlopen(req2, timeout=30) as resp:
             overlay_head = resp.read()
@@ -236,27 +231,19 @@ def extract_version(download_url, main_exe, seven_zip, work_dir):
             return {}
         seven_z_abs = overlay_start + seven_z_in_overlay
         print(f"        7z: 绝对 0x{seven_z_abs:X}")
-
-        # 获取总大小
         headers = http_head(download_url)
         total_size = int(headers.get('Content-Length', 0))
         print(f"        总大小: {total_size/1024/1024:.1f} MB")
-
-        # 下载完整文件（CI 环境网络快，可接受）
         print(f"  [2/4] 下载安装包（{total_size/1024/1024:.1f} MB）...")
         archive_path = os.path.join(work_dir, 'installer.exe')
         urllib.request.urlretrieve(download_url, archive_path)
         print(f"        已下载: {os.path.getsize(archive_path)/1024/1024:.1f} MB")
-
-        # 截取 7z 部分
         seven_z_path = os.path.join(work_dir, 'archive.7z')
         with open(archive_path, 'rb') as f:
             f.seek(seven_z_abs)
             seven_z_data = f.read()
         with open(seven_z_path, 'wb') as f:
             f.write(seven_z_data)
-
-        # 提取主程序
         print(f"  [3/4] 提取 {main_exe}...")
         extract_dir = os.path.join(work_dir, 'extracted')
         os.makedirs(extract_dir, exist_ok=True)
@@ -266,8 +253,6 @@ def extract_version(download_url, main_exe, seven_zip, work_dir):
             err = r.stderr.decode('utf-8', errors='replace')[:300]
             print(f"  [!] 提取失败: {err}")
             return {}
-
-        # 查找文件
         exe_path = None
         for root, dirs, files in os.walk(extract_dir):
             for f in files:
@@ -276,21 +261,16 @@ def extract_version(download_url, main_exe, seven_zip, work_dir):
                     break
             if exe_path:
                 break
-
         if not exe_path:
             print(f"  [!] 未找到 {main_exe}")
             return {}
-
         print(f"        已提取: {os.path.getsize(exe_path)} 字节")
-
-        # 读取版本号
         print("  [4/4] 读取 PE 版本资源...")
         with open(exe_path, 'rb') as f:
             exe_data = f.read()
         version_info = get_pe_version(exe_data)
         print(f"        版本: {version_info.get('FileVersion', 'N/A')}")
         return version_info
-
     except Exception as e:
         print(f"  [!] 版本号识别失败: {e}", file=sys.stderr)
         import traceback
@@ -307,41 +287,32 @@ def fetch_product(product_key, seven_zip, work_dir, get_version=True):
     print(f"\n{'='*60}")
     print(f"抓取 {cfg['name']}")
     print(f"{'='*60}")
-
-    # 1. 下载器令牌
     print("\n[1/3] 获取下载器令牌...")
     token, downloader_url = get_downloader_token(product_key)
     print(f"  令牌: {token}")
-
-    # 2. 离线包链接
     print("\n[2/3] 调用 API 获取离线包链接...")
-    candidates = fetch_offline_links(product_key, rounds=10)
+    candidates = fetch_offline_links(product_key, rounds=15)
     print(f"  共 {len(candidates)} 个候选")
-
     if not candidates:
         print("  [!] 未获取到链接")
         return None
-
-    # 3. 验证取最新
     print("\n[3/3] 验证候选...")
     best = None
-    for tok, link in candidates.items():
+    for tok, cand in candidates.items():
+        link = cand['link']
+        api_md5 = cand.get('md5', '')
         info = verify_link(link)
         if info:
-            print(f"  {tok}: {info['size_mb']} MB / {info['build_date']}")
+            print(f"  {tok}: {info['size_mb']} MB / {info['build_date']} / md5={api_md5[:16]}...")
             if best is None or info['build_date'] > best['build_date']:
-                best = {**info, 'token': tok, 'link': link}
-
+                best = {**info, 'token': tok, 'link': link, 'md5': api_md5}
     if not best:
         print("  [!] 全部验证失败")
         return None
-
-    # 4. 版本号识别
     version_info = {}
     if get_version:
         print(f"\n[4/4] 自动识别版本号...")
         version_info = extract_version(best['link'], cfg['main_exe'], seven_zip, work_dir)
-
     result = {
         'product': cfg['name'],
         'product_key': product_key,
@@ -355,60 +326,46 @@ def fetch_product(product_key, seven_zip, work_dir, get_version=True):
         'size_mb': best['size_mb'],
         'build_date': best['build_date'],
         'last_modified': best['last_modified'],
-        'md5': '',
+        'md5': best.get('md5', ''),
         'fetched_at': datetime.now(timezone.utc).isoformat(),
     }
-
     print(f"\n结果: {cfg['name']} v{result['version']}")
     print(f"  链接: {result['link']}")
     print(f"  大小: {result['size_mb']} MB / 构建: {result['build_date']}")
     return result
 
 def main():
-    # 检测 7z
     seven_zip = get_seven_zip()
     if not seven_zip:
         print("[!] 无法获取 7z 工具，退出")
         sys.exit(1)
     print(f"[*] 使用 7z: {seven_zip}")
-
-    # 读取现有 data.json（保留 MD5 等）
     existing = {}
     if os.path.exists(DATA_JSON):
         with open(DATA_JSON, 'r', encoding='utf-8') as f:
             old = json.load(f)
             for p in old.get('products', []):
                 existing[p['product_key']] = p
-
     work_dir = tempfile.mkdtemp(prefix='cyberlink_')
     results = []
-
     for key in ['powerdirector', 'photodirector']:
         r = fetch_product(key, seven_zip, work_dir, get_version=True)
         if r:
-            # 保留旧 MD5（如果链接相同）
             if key in existing and existing[key].get('link') == r['link']:
                 r['md5'] = existing[key].get('md5', '')
             results.append(r)
-
-    # 清理
     shutil.rmtree(work_dir, ignore_errors=True)
-
-    # 写入 data.json
     output = {
         'updated_at': datetime.now(timezone.utc).isoformat(),
         'products': results,
     }
-
     with open(DATA_JSON, 'w', encoding='utf-8') as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
-
     print(f"\n{'='*60}")
     print(f"已更新 {DATA_JSON}")
     print(f"{'='*60}")
     for r in results:
         print(f"  {r['product']}: v{r['version']} ({r['size_mb']} MB, {r['build_date']})")
-
     return 0 if results else 1
 
 
